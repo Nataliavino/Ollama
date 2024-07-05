@@ -1,0 +1,50 @@
+---
+- name: Setup EC2 instance for Chat UI
+  hosts: chat_ui
+  become: yes
+  vars:
+    repo_url: "https://github.com/Nataliavino/Ollama.git"
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install necessary packages
+      apt:
+        name:
+          - git
+          - python3-pip
+          - nodejs
+          - npm
+        state: present
+
+    - name: Clone the repository
+      git:
+        repo: "{{ repo_url }}"
+        dest: /home/ubuntu/chatgpt-minimal
+        version: HEAD
+
+    - name: Install npm dependencies
+      npm:
+        path: /home/ubuntu/chatgpt-minimal
+        state: present
+
+    - name: Install pm2 globally
+      npm:
+        name: pm2
+        global: yes
+        state: present
+
+    - name: Start the application with pm2
+      command: pm2 start npm --name "chat-ui" -- start
+      args:
+        chdir: /home/ubuntu/chatgpt-minimal
+
+    - name: Ensure pm2 startup script is generated
+      command: pm2 startup systemd
+      args:
+        creates: /etc/systemd/system/pm2-ubuntu.service
+
+    - name: Save pm2 process list
+      command: pm2 save
