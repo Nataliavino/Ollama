@@ -3,7 +3,7 @@
   hosts: chat_ui
   become: yes
   vars:
-    repo_url: "https://github.com/Nataliavino/Ollama.git"
+    repo_url: "https://github.com/Nataliavino/ollama.git"
   tasks:
     - name: Update and upgrade apt packages
       apt:
