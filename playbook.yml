@@ -1,50 +1,88 @@
 ---
-- name: Setup EC2 instance for Chat UI
-  hosts: chat_ui
+- name: Setup Ollama Web UI
+  hosts: all
   become: yes
-  vars:
-    repo_url: "https://github.com/Nataliavino/ollama.git"
   tasks:
-    - name: Update and upgrade apt packages
+    - name: Update apt cache
       apt:
         update_cache: yes
-        upgrade: dist
 
-    - name: Install necessary packages
+    - name: Install required packages
       apt:
         name:
-          - git
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
           - python3-pip
-          - nodejs
-          - npm
+          - virtualenv
+          - python3-setuptools
+        state: latest
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
         state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: yes
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+
+    - name: Create ollama directory
+      file:
+        path: /home/ubuntu/ollama
+        state: directory
+        mode: '0755'
 
     - name: Clone the repository
       git:
-        repo: "{{ repo_url }}"
-        dest: /home/ubuntu/chatgpt-minimal
-        version: HEAD
+        repo: 'https://github.com/Nataliavino/ollama.git'
+        dest: /home/ubuntu/ollama
+        version: main
 
-    - name: Install npm dependencies
-      npm:
-        path: /home/ubuntu/chatgpt-minimal
-        state: present
-
-    - name: Install pm2 globally
-      npm:
-        name: pm2
-        global: yes
-        state: present
-
-    - name: Start the application with pm2
-      command: pm2 start npm --name "chat-ui" -- start
+    - name: Install Ollama
+      shell: |
+        curl https://ollama.ai/install.sh | sh
       args:
-        chdir: /home/ubuntu/chatgpt-minimal
+        creates: /usr/local/bin/ollama
 
-    - name: Ensure pm2 startup script is generated
-      command: pm2 startup systemd
-      args:
-        creates: /etc/systemd/system/pm2-ubuntu.service
+    - name: Start Ollama service
+      systemd:
+        name: ollama
+        state: started
+        enabled: yes
 
-    - name: Save pm2 process list
-      command: pm2 save
+    - name: Create .ollama directory
+      file:
+        path: /home/ubuntu/.ollama
+        state: directory
+        mode: '0755'
+
+    - name: Pull Ollama Web UI Docker image
+      docker_image:
+        name: ghcr.io/ollama-webui/ollama-webui:main
+        source: pull
+
+    - name: Run Ollama Web UI Docker container
+      docker_container:
+        name: ollama-webui
+        image: ghcr.io/ollama-webui/ollama-webui:main
+        state: started
+        restart_policy: always
+        ports:
+          - "80:8080"
+        volumes:
+          - /home/ubuntu/.ollama:/root/.ollama
+        env:
+          OLLAMA_API_BASE_URL: "http://localhost:11434/api"
