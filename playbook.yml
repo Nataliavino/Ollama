@@ -1,5 +1,5 @@
 ---
-- name: Setup Ollama Web UI
+- name: Setup Chat UI Application
   hosts: all
   become: yes
   tasks:
@@ -15,8 +15,8 @@
           - curl
           - software-properties-common
           - python3-pip
-          - virtualenv
-          - python3-setuptools
+          - nodejs
+          - npm
         state: latest
 
     - name: Add Docker GPG apt Key
@@ -36,53 +36,40 @@
         update_cache: yes
 
     - name: Install Docker Module for Python
-      pip:
-        name: docker
+      apt:
+        name: python3-docker
+        state: present
 
-    - name: Create ollama directory
+    - name: Create application directory
       file:
-        path: /home/ubuntu/ollama
+        path: /home/ubuntu/chat-ui
         state: directory
         mode: '0755'
 
     - name: Clone the repository
       git:
         repo: 'https://github.com/Nataliavino/ollama.git'
-        dest: /home/ubuntu/ollama
+        dest: /home/ubuntu/chat-ui
         version: main
 
-    - name: Install Ollama
-      shell: |
-        curl https://ollama.ai/install.sh | sh
+    - name: Install npm dependencies
+      npm:
+        path: /home/ubuntu/chat-ui
+
+    - name: Build the Next.js application
+      command: npm run build
       args:
-        creates: /usr/local/bin/ollama
+        chdir: /home/ubuntu/chat-ui
 
-    - name: Start Ollama service
-      systemd:
-        name: ollama
-        state: started
-        enabled: yes
+    - name: Start the Next.js application
+      command: npm start
+      args:
+        chdir: /home/ubuntu/chat-ui
+      async: 1000
+      poll: 0
 
-    - name: Create .ollama directory
-      file:
-        path: /home/ubuntu/.ollama
-        state: directory
-        mode: '0755'
-
-    - name: Pull Ollama Web UI Docker image
-      docker_image:
-        name: ghcr.io/ollama-webui/ollama-webui:main
-        source: pull
-
-    - name: Run Ollama Web UI Docker container
-      docker_container:
-        name: ollama-webui
-        image: ghcr.io/ollama-webui/ollama-webui:main
-        state: started
-        restart_policy: always
-        ports:
-          - "80:8080"
-        volumes:
-          - /home/ubuntu/.ollama:/root/.ollama
-        env:
-          OLLAMA_API_BASE_URL: "http://localhost:11434/api"
+    - name: Ensure application is reachable
+      wait_for:
+        port: 80
+        delay: 10
+        timeout: 300
